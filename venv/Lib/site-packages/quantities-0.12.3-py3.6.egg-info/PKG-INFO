@@ -1,0 +1,24 @@
+Metadata-Version: 1.1
+Name: quantities
+Version: 0.12.3
+Summary: Support for physical quantities with units, based on numpy
+Home-page: http://python-quantities.readthedocs.io/
+Author: Darren Dale
+Author-email: dsdale24@gmail.com
+License: BSD
+Download-URL: http://pypi.python.org/pypi/quantities
+Description: Quantities is designed to handle arithmetic and
+            conversions of physical quantities, which have a magnitude, dimensionality
+            specified by various units, and possibly an uncertainty. See the tutorial_
+            for examples. Quantities builds on the popular numpy library and is
+            designed to work with numpy ufuncs, many of which are already
+            supported. Quantities is actively developed, and while the current features
+            and API are stable, test coverage is incomplete so the package is not
+            suggested for mission-critical applications.
+        
+            .. _tutorial: http://python-quantities.readthedocs.io/en/latest/user/tutorial.html
+            
+Keywords: quantities,units,physical,constants
+Platform: Any
+Requires: python (>=2.7.0)
+Requires: numpy (>=1.8.2)

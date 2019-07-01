@@ -101,7 +101,7 @@ def generate_segment(data, segment, spike_data, metadata, quality='Good'):
         segment.analogsignals.append(ai_signal)
         count+=1
 
-    count = [0, 0, 1, 1, 2, 2]
+    count = [0, 0, 1, 1, 2, 2,3,3,4,4,5,5,6,6]
     count_inx = 0
     for inx in range(data.shape[0]):
         data_timestamps_array = data.iloc[inx]['Timestamps']
