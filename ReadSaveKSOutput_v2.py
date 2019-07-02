@@ -24,6 +24,7 @@ def readKS_SaveDF (file_location, save_path, samplerate,automated = False):
     def read_KS_output(file_location,automated = False):
         
         spike_samples = np.load(file_location +'/spike_times.npy')
+        print('cluster has: {} spikes'.format(spike_samples.size))
         spike_times = spike_samples/samplerate # This gives you time of Spikes in seconds. THINK ABOUT TO SUBTRACT THE FIRST VALUE!
         spike_cluster = np.load(file_location+'/spike_clusters.npy')
         tempScalingAmps = np.load(file_location+'/amplitudes.npy') # The cluster identity of every spike. same length as spike_times. result of manual sorting
@@ -56,13 +57,13 @@ def readKS_SaveDF (file_location, save_path, samplerate,automated = False):
                 if elt not in bind:
                     bind[elt] = i
             #print(bind)
-            return [bind.get(int(itm), None) for itm in a]
+            return [bind.get(itm, None) for itm in a.ravel()]
 
         #print(good_cluster_array)
 
         good_spikes_times_bool = ismember(spike_cluster, good_cluster_array)
         good_spikes_times_bool = np.array(good_spikes_times_bool)
-        good_check = (good_spikes_times_bool == 1)
+        good_check = (good_spikes_times_bool != None)
         
         good_spike_times = spike_times[good_check].flatten()
         good_spike_samples = spike_samples[good_check].flatten()
@@ -71,7 +72,7 @@ def readKS_SaveDF (file_location, save_path, samplerate,automated = False):
         
         mua_spikes_times_bool = ismember(spike_cluster, mua_cluster_array)
         mua_spikes_times_bool = np.array(mua_spikes_times_bool)
-        mua_check = (mua_spikes_times_bool == 1)
+        mua_check = (mua_spikes_times_bool != None)
         
         mua_spike_times = spike_times[mua_check].flatten()
         mua_spike_samples = spike_samples[mua_check].flatten()
@@ -80,7 +81,7 @@ def readKS_SaveDF (file_location, save_path, samplerate,automated = False):
         
         noise_spikes_times_bool = ismember(spike_cluster, noise_cluster_array)
         noise_spikes_times_bool = np.array(noise_spikes_times_bool)
-        noise_check = (noise_spikes_times_bool == 1)
+        noise_check = (noise_spikes_times_bool != None)
         
         noise_spike_times = spike_times[noise_check].flatten()
         noise_spike_samples = spike_samples[noise_check].flatten()

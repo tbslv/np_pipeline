@@ -10,18 +10,20 @@ import os, csv, time
 import matplotlib.pyplot as plt
 
 # ================================================ #
-date_of_rec = '010101'
-animal_id = 'JPO-040493'
+date_of_rec = '20190628'
+animal_id = 'JPO-001823'
 recording_location = 'VPL'
-path_to_stimttls = '/Volumes/Untitled/Neuropixel/180816/Exp1/A001_stimData.pkl'
-depth_of_probe = 4782
+working_directory = 'F:/NeuropixelData/2019-06-28_09-27-20/'
+stimdata_folder = os.path.join(working_directory,'NationalInstruments/')
+path_to_stimttls = os.path.join(stimdata_folder,'001_stimData.pkl')
+depth_of_probe = 4671
 
-working_directory = '/Users/tobiasleva/test'
+
 os.chdir(working_directory)
 
-ks_output_folder = '/Volumes/Untitled/Neuropixel/180816/Exp1/2018-08-16_13-19-34/Sorting_4/'
+ks_output_folder = os.path.join(working_directory, 'experiment1/recording1/continuous/Neuropix-PXI-100.0')
 time_limits = None
-rawdata_filename = 'experiment1_100-0_0.dat'
+rawdata_filename = 'continuous.dat'
 
 # ================================================ #
 cluster_summary_tmp = pd.DataFrame([])

@@ -41,12 +41,13 @@ def read_cluster_groups_CSV(directory):
     cluster_id = [];
     if os.path.isfile(os.path.join(directory,'cluster_group.tsv')):
         cluster_id = [row for row in csv.reader(open(os.path.join(directory,'cluster_group.tsv')))][1:];
-    else:
-        if os.path.isfile(os.path.join(directory,'cluster_groups.csv')):
-            cluster_id = [row for row in csv.reader(open(os.path.join(directory,'cluster_groups.csv')))][1:];
-        else:
-            print('could not find cluster groups csv or tsv')
-            return None
+    elif os.path.isfile(os.path.join(directory,'cluster_groups.csv')):
+        cluster_id = [row for row in csv.reader(open(os.path.join(directory,'cluster_groups.csv')))][1:];
+            
+    else: 
+        cluster_id = [row for row in csv.reader(open(os.path.join(directory,'cluster_KSLabel.tsv')))][1:];
+            
+
     good=[];mua=[];unsorted=[]
     for i in np.arange(1,np.shape(cluster_id)[0]):
         if cluster_id[i][0].split('\t')[1] == 'good':#if it is a 'good' cluster by manual sort
@@ -376,7 +377,7 @@ def masked_cluster_quality(directory,time_limits=None,n_fet=3,minimum_number_of_
 def masked_cluster_quality_sparse(spike_clusters,pc_features,pc_feature_ind,spike_times,spike_templates,time_limits=None,n_fet=3,fet_n_chans=9):
     fet_N = np.shape(pc_features)[1] * fet_n_chans
     N = len(spike_clusters)
-    cluster_IDs = np.unique(spike_clusters)[:5]
+    cluster_IDs = np.unique(spike_clusters)
     unit_quality = np.zeros(len(cluster_IDs))
     contamination_rate = np.zeros(len(cluster_IDs))
     flda = np.zeros(len(cluster_IDs))
