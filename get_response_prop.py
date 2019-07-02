@@ -246,7 +246,7 @@ def plot_PSTH_gaussian(selection, times_cut,trials=None,samplingrate=30000,cv = 
 
 		
 	times_cut = np.sort(times_cut)
-	pdf,bw,x_grid,bins = calculate_bandwidth(times_cut,start=start_rel,end=end_rel,cv=cv)
+	pdf,bw,x_grid,bins = calculate_bandwidth(times_cut,cv=cv) # start=start_rel,end=end_rel
 
 	response = response_detection_core(pdf,samplingrate=samplingrate)
 
