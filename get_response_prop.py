@@ -238,7 +238,7 @@ def _plot(x, threshold, n_above, n_below, threshold2, n_above2, inds, ax):
 		# plt.grid()
 		plt.show()
 
-def plot_PSTH_gaussian(selection, times_cut,trials=None,samplingrate=30000,cv = None,start_rel=None,end_rel=None):
+def plot_PSTH_gaussian_cv(selection, times_cut,trials=None,samplingrate=30000,cv = None,start_rel=None,end_rel=None):
 	
 	# selection needs to be row of dataframe
 	
@@ -266,6 +266,38 @@ def plot_PSTH_gaussian(selection, times_cut,trials=None,samplingrate=30000,cv = 
 
 	return pdf,response,fig
 
+def plot_PSTH_gaussian_manual(ax1,selection, times_cut,samplingrate=30000,binsize = None,bandwidth= None,start=None,end=None,stepsize = None,pdf = True):
+
+    # selection needs to be row of dataframe
+
+    #from get_response_prop import calculate_bandwidth,response_detection_core,build_pdf
+
+
+    times_cut = np.sort(times_cut)
+    pdf = build_pdf(times_cut,start,end,samplingrate=30000,kernel = 'gaussian',bw = 150,stepsize=stepsize)
+
+
+    bins = np.arange(start*samplingrate,end*samplingrate,binsize*samplingrate/1000)
+    x_grid = np.arange(start*samplingrate,end*samplingrate,stepsize*samplingrate/1000)
+
+    n, bins, patches= ax1.hist(times_cut, bins, fc='black', histtype='stepfilled', alpha=0.8,)
+    
+    #ax2 = ax1.twinx()
+    #test = ax2.plot(x_grid, pdf, linewidth=2, alpha=0.5, color='black')#,label='bw=%.1f ms // binsize=%.1f ms' % (bandwidth,binsize))
+    #ax2.legend(loc='lower left')
+
+   
+
+
+    
+
+    #ax2.set_yticks([])
+    ax1.set_xticks(np.array([4,9,14,19])*samplingrate)
+    ax1.set_xticklabels(['-5','0','5','10'])
+    #plt.show()
+    #plt.close()
+
+    return n
 # %load ./../functions/detect_cusum.py
 """Cumulative sum algorithm (CUSUM) to detect abrupt changes in data."""
 
@@ -472,6 +504,16 @@ def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0)) 
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
+def plot_raster(data_tmp,ax1,trials):
+    for i in range(trials):
+        
+        dots_x = (data_tmp[:,0][data_tmp[:,1]==i]).astype(int)
+        dots = np.ones(dots_x.size)+i
+        ax1.scatter(dots_x,dots,s=0.4,color='black')
+    #cleanAxes(ax1,total=True)
+    #plt.show()
+    return
+
 def placeAxesOnGrid(fig,dim=[1,1],xspan=[0,1],yspan=[0,1],wspace=None,hspace=None,):
     '''
     Takes a figure with a gridspec defined and places an array of sub-axes on a portion of the gridspec
@@ -509,6 +551,8 @@ def placeAxesOnGrid(fig,dim=[1,1],xspan=[0,1],yspan=[0,1],wspace=None,hspace=Non
 
     inner_ax = np.array(inner_ax).squeeze().tolist() #remove redundant dimension
     return inner_ax
+
+
 def cleanAxes(ax,bottomLabels=False,leftLabels=False,rightLabels=False,topLabels=False,total=False):
     ax.tick_params(axis='both',labelsize=10)
     ax.spines['top'].set_visible(False);
@@ -660,12 +704,12 @@ def plot_pdf_hist(selection_tmp,times_cut,pdf,bins,start = None,end = None,
     
     return ax, ax1, title
 
-def build_pdf(times_cut,start,end,samplingrate=30000,kernel = 'gaussian',bw = None):
+def build_pdf(times_cut,start,end,samplingrate=30000,kernel = 'gaussian',bw = None,stepsize=None):
    
-    x = np.arange((start+end)*samplingrate)[:, np.newaxis]
+    x = np.arange(start*samplingrate,end*samplingrate,stepsize*samplingrate/1000)[:, np.newaxis]
     times_cut = np.sort(times_cut)
     # Gaussian KDE
-    kde = KernelDensity(kernel=kernel, bandwidth=bw).fit(times_cut[:, np.newaxis])
+    kde = KernelDensity(kernel=kernel, bandwidth=bw*30).fit(times_cut[:, np.newaxis])
     log_dens = kde.score_samples(x)
     pdf = np.exp(log_dens)
 
