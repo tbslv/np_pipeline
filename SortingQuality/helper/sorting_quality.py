@@ -217,7 +217,7 @@ def isiViolations(directory,time_limits=None,tr=.0015,tc=0):
     spike_times = np.load(spike_times_path) / float(params['sample_rate'])
 
     print ('computing ISI violations...')
-    cluster_IDs = np.unique(spike_clusters)[:5]
+    cluster_IDs = np.unique(spike_clusters)
     cluster_IDs = np.sort(cluster_IDs)
     print(cluster_IDs)
     isiV = np.zeros(np.shape(cluster_IDs)[0])
@@ -273,7 +273,7 @@ def cluster_signalToNoise(directory,time_limits=None,filename='experiment1_100-0
     data = load_phy_template(directory,site_positions)
    
     print ('computing Quian Quiroga signal/noise ratio...')
-    cluster_IDs = np.unique(spike_clusters)[:5]
+    cluster_IDs = np.unique(spike_clusters)
     sn_peak = np.zeros(np.shape(cluster_IDs)[0])
     sn_mean = np.zeros(np.shape(cluster_IDs)[0])
     #spike_amplitudes = []
