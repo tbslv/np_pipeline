@@ -8,30 +8,35 @@ from neo_access import *
 from get_response_prop import *
 import numpy as np
 
+wd = 'D:/Work/Recordings/DATA/Neuropixel/190628/2019-06-28_09-27-20/SpikeSortingResults'
+
 os.chdir(wd)
-io = PickleIO(filename="vpl_block.pkl")
+io = PickleIO(filename="vpl_block_20190628.pkl")
 blk2 = io.read()[0]
-dataframe = pd.read_pickle(os.path.join(wd,'vpl_block_df.pkl'))
+dataframe = pd.read_pickle(os.path.join(wd,'vpl_block_df_20190628.pkl'))
+
+expID = '001_'
+sweep_Ids = [0.0,1.0,2.0,3.0,4.0,5.0,6.0]
+data_tot = []
+pcs_tot = []
+for sw in sweep_Ids:
+    selection = dataframe[(dataframe['expID'] == expID)& (dataframe['sweep_Id'] == sw)]
+    data= get_all_data(blk2,selection,raster=True,timestamps=False,spikes=False,aisignal=False)
+    data_tot.append(data)
 
 
-clusters = ['1562']
 
-selection = dataframe[(dataframe['basetemp'] == 32.0) &
-                      (dataframe['stimtemp'] == 22.0)&
-                      (dataframe['cluster'].isin(clusters)) ]
-
-data = get_all_data(blk2,selection,raster=True,timestamps=True,spikes=True,aisignal=True)
-
-trials = 50
+trials = 20
 samplingrate = 30000
 baseline_window = 1
 cv = 40
-stimulus_start = 1
-window = 7500
+stimulus_start = 9
+baselineend =9
+window = 0.3
 selection_responsive = pd.DataFrame([])
-for unit in range(selection.shape[0])[:1]:
+for unit in range(selection.shape[0]):
 
-    selection_tmp = selection.iloc[0]
+    selection_tmp = selection.iloc[unit]
     data_tmp = data[:][0][:]
 
     start = selection_tmp.pre - 1
@@ -51,9 +56,9 @@ for unit in range(selection.shape[0])[:1]:
 
     selection_responsive_tmp = pd.DataFrame([])
 
-    pdf, response, fig = plot_PSTH_gaussian(selection_tmp, data_tmp, trials=50, samplingrate=30000,cv=40)
+    pdf, response, fig = plot_PSTH_gaussian_cv(selection_tmp, data_tmp, trials=trials, samplingrate=samplingrate,cv=cv)
 
-    baseline = np.mean(pdf[:stimulus_start * samplingrate])
+    baseline = np.mean(pdf[int(stimulus_start-baseline_window):stimulus_start * samplingrate])
 
     if response == 'responsive':
         selection_responsive_tmp.at['0', 'cluster'] = selection_tmp['cluster']
@@ -72,23 +77,25 @@ for unit in range(selection.shape[0])[:1]:
 
         selection_responsive_tmp.at['0', 'response'] = response
         selection_responsive_tmp.at['0', 'baselinefr'] = calculate_base_peak_core(raster, selection_tmp,
-                                                                                  window=0.3,
-                                                                                  baselineend=1,
-                                                                                  stimulus_start=1,
-                                                                                  samplingrate=30000)[0]
+                                                                                  window=window,
+                                                                                  baselineend=baselineend,
+                                                                                  stimulus_start=stimulus_start,
+                                                                                  samplingrate=samplingrate)[0]
         selection_responsive_tmp.at['0', 'peakfr'] = calculate_base_peak_core(raster, selection_tmp,
-                                                                              window=0.3,
-                                                                              baselineend=1,
-                                                                              stimulus_start=1,
+                                                                              window=window,
+                                                                              baselineend=baselineend,
+                                                                              stimulus_start=stimulus_start,
                                                                               samplingrate=30000)[1]
-        response_time = response_time_core(pdf, stimulus_start=1, samplingrate=30000)
+        response_time = response_time_core(pdf, stimulus_start=stimulus_start, samplingrate=30000)
         selection_responsive_tmp.at['0', 'response_time'] = response_time
         selection_responsive_tmp.at['0', 'response_onset'] = detect_onset(pdf,
                                                                           threshold=baseline + 2 * np.std(pdf[0:int(
                                                                               stimulus_start * samplingrate)]),
-                                                                          n_above=window, n_below=30,
+                                                                          n_above=7500, n_below=30,
                                                                           show=False)[0][0] - (stimulus_start * samplingrate)
         selection_responsive_tmp.at['0', 'response_duration'] = response_duration(pdf, response_time)[2]
 
         selection_responsive = selection_responsive.append(selection_responsive_tmp)
+
+        selection_responsive.to_pickle(wd + "/single_unit_props.pkl")
 

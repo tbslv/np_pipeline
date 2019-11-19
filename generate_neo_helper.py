@@ -4,12 +4,6 @@ import quantities as pq
 import pandas as pd
 
 
-def generate_analogsignal_core(data_tmp, units='C', samplingRate=1000, inx=None):
-
-    ai_signal = neo.AnalogSignal(data_tmp, units=units, sampling_rate=samplingRate*pq.Hz,
-                                 name=inx+1)
-
-    return ai_signal
 
 
 def generate_segment_core(date=None, date_of_rec=None,
@@ -21,33 +15,6 @@ def generate_segment_core(date=None, date_of_rec=None,
     seg.name = exp
 
     return seg
-
-
-def generate_spiketrain_core(spikes, start=None, end=None, quality='Good', cluster_id=None):
-
-    if start is not None and end is not None:
-
-        spikes_segment = spikes[quality][cluster_id]['Spike Times'][
-            ((spikes[quality][cluster_id]['Spike Times']) > start) & (
-                        (spikes[quality][cluster_id]['Spike Times']) < end)]
-        train = neo.SpikeTrain(spikes_segment, units='s', t_start=start, t_stop=end, name=cluster_id)
-        train.annotate(quality=quality)
-        return train
-
-    spikes_segment = spikes[quality][cluster_id]['Spike Times']
-    train = neo.SpikeTrain(spikes_segment, units='s', t_start=start, t_stop=end, name=cluster_id)
-    train.annotate(quality=quality)
-
-    return train
-
-
-def generate_event_core(data_timestamps, title):
-    ttl = neo.Event(data_timestamps * pq.s, labels=[title] * data_timestamps.size)
-    ttl.name = title
-
-
-    return ttl
-
 
 def generate_block_core(date=None, working_directory=None, date_of_rec=None,
                         recording_location=None, animal_id=None,
@@ -62,61 +29,50 @@ def generate_block_core(date=None, working_directory=None, date_of_rec=None,
     return block_tmp
 
 
-def generate_alignedspikes_core(raster, name=None): #, sweeplength=None, pre=None, post=None,index=None):
-
-    spikes = neo.IrregularlySampledSignal(np.where(raster == 1)[1], np.where(raster == 1)[0],
-                                          units='s', time_units='s', name=name,
-                                          description='sweep aligned spike times // container_name.signal = sweep_id')
-
-    #spikes.annotate(sweeplength=sweeplength, pre=pre, post=post, index=index)
-
-    return spikes
-
-
-def raster_build(spikes_tmp, trials, samplingrate=30000, sweeplength=None):
-    raster = np.zeros([len(trials), sweeplength * samplingrate])
-
-    for ii in range(len(trials)):
-        raster_ind = spikes_tmp[np.where(np.logical_and(spikes_tmp > trials[ii],
-                                                        spikes_tmp < (trials[ii] +
-                                                                      sweeplength)))] - trials[ii]
-
-        raster_ind = raster_ind * samplingrate
-        raster[ii, raster_ind.astype(int)] = 1
-
-    return raster
-
-
 def generate_segment(data, segment, spike_data, metadata, quality='Good'):
+    samplingrate, sweeplength, pre, post, rep, exp_ID,pupil_freq,active_zones, stim_infos = read_sweepparamter(metadata)
 
-    samplingrate, sweeplength, pre, post, rep, exp_Id, stim_infos = read_sweepparamter(metadata)
-
+    if "Modalities" not in metadata.columns:
+        mod = 'temp'
+    else:
+        mod = 'touch'
     count = 0
     for inx in range(data.shape[0]):
-        data_feedback = data.iloc[inx]['Feedback']
-        if str(data_feedback) == 'nan':
-            continue
+        data_feedback_3 = data.iloc[inx]['Feedback_3']
+        data_feedback_4 = data.iloc[inx]['Feedback_4']
+        
+        data_feedback = np.zeros([data_feedback_3.shape[0],2,data_feedback_3.shape[2]])
+        data_feedback[:,0,:] = data_feedback_3[:,0,:]
+        data_feedback[:,1,:] = data_feedback_4[:,0,:]
         ai_signal = generate_analogsignal_core(data_feedback, inx=inx)
-        add_metaData(ai_signal, samplingrate, sweeplength, pre, post, rep, stim_infos[count])
+        add_metaData(ai_signal,samplingrate, sweeplength, pre, post, rep, exp_ID,pupil_freq,active_zones, stim_infos[count],mod=mod)
         segment.analogsignals.append(ai_signal)
         count+=1
-
-    count = [0, 0, 1, 1, 2, 2,3,3,4,4,5,5,6,6]
-    count_inx = 0
-    for inx in range(data.shape[0]):
-        data_timestamps_array = data.iloc[inx]['Timestamps']
-        data_timestamps = data['Timestamps']
-        title = list(data_timestamps.index)[inx]
-
-        if str(data_timestamps_array) == 'nan':
-            continue
+    
+    count = 0
+    data_timestamps = data['Stimstart'].dropna()
+    for i in range(int(data.shape[0])):
+        title = np.array(data_timestamps.index)[i]
+        data_timestamps_array = data_timestamps.iloc[i]
         ttl = generate_event_core(data_timestamps_array, title)
-        add_metaData(ttl, samplingrate, sweeplength, pre, post, rep, stim_infos[count[count_inx]])
+        add_metaData(ttl,samplingrate, sweeplength, pre, post, rep, exp_ID,pupil_freq,active_zones, stim_infos[count],mod = mod)
         segment.events.append(ttl)
-        count_inx += 1
+        count += 1
 
-    start = segment.events[1].times[0]
-    end = segment.events[-1].times[-1]
+    starts = []
+    ends = []
+
+    for i in range(len(segment.events)):
+        starts.append(np.min(segment.events[i].times))
+        ends.append(np.max(segment.events[i].times))
+
+    start = np.min(starts)
+    end = np.max(ends)
+
+    #start = start-pre
+    end = end + post
+    print('start: {}'.format(start))
+    print('end: {}'.format(end))
 
     cluster = spike_data[quality].keys()
 
@@ -130,51 +86,18 @@ def generate_segment(data, segment, spike_data, metadata, quality='Good'):
         spikes = spk.as_array()
         count = 0
         for ii in range(len(segment.events)):
-
-            if 'sweepstart' in segment.events[ii].name:
-                ttls = segment.events[ii].as_array()
-                raster = raster_build(spikes, ttls, sweeplength=sweeplength)
-
-                alignedSpikes = generate_alignedspikes_core(raster, name=spk.name)
-                add_metaData(alignedSpikes, samplingrate, sweeplength, pre, post, rep, stim_infos[count])
-                segment.irregularlysampledsignals.append(alignedSpikes)
-                count+=1
+           
+            ttls = segment.events[ii].as_array()
+            ttls = ttls - pre
+            raster = raster_build(spikes, ttls, sweeplength=sweeplength)
+            
+            alignedSpikes = generate_alignedspikes_core(raster, name=spk.name)
+                    
+            add_metaData(alignedSpikes,samplingrate, sweeplength, pre, post, rep, exp_ID,pupil_freq,active_zones, stim_infos[ii],mod = mod)
+            segment.irregularlysampledsignals.append(alignedSpikes)
+            count+=1
 
     return segment
-
-
-def read_sweepparamter(metadata):
-    combi = np.unique(metadata['sweepID'])
-    samplingrate = metadata['Samplingrate'][0]
-    sweeplength = metadata['Sweeplength'][0]
-    pre = metadata['Pre Stimulus Time'][0]
-    post = sweeplength - pre
-    rep = metadata['Repititions'][0]
-    exp_ID = metadata['ID'][0]
-
-    stim_infos = []
-    for i in range(len(combi)):
-        selection = metadata[metadata['sweepID'] == combi[i]]
-        try:
-            stim_infos.append(
-            {'sweepID': selection['sweepID'].iloc[0], 'stimtemp': selection['Stimulus Temp'].iloc[0],
-             'basetemp': selection['Baseline Temp'].iloc[0], 'duration': selection['Stimulus Duration'].iloc[0]})
-        except:
-            stim_infos.append(
-            {'sweepID': selection['sweepID'].iloc[0], 'stimfreq': selection['Stimulus Frequency'].iloc[0],
-             'stimamp': selection['Stimulus Amplitude'].iloc[0], 'duration': selection['Stimulus Duration'].iloc[0]})
-    return samplingrate, sweeplength, pre, post, rep, exp_ID, stim_infos
-
-
-def add_metaData(ai_signal, samplingrate, sweeplength, pre, post, rep, stim_infos):
-    sweep_id = list(stim_infos.values())[0]
-    basetemp = list(stim_infos.values())[2] * 10
-    duration = list(stim_infos.values())[3]
-    stimtemp = list(stim_infos.values())[1] * 10
-
-    ai_signal.annotate(sweeplength=sweeplength, samplinrate=samplingrate, basetemp=basetemp, sweep_Id=sweep_id,
-                       stimtemp=stimtemp, duration=duration, pre=pre, post=post, trials=rep)
-
 
 def list_files(working_directory):
     import os
@@ -193,6 +116,100 @@ def list_files(working_directory):
 
     return metadatas, stimdatas
 
+
+import numpy as np
+
+
+def read_sweepparamter(metadata):
+    try:
+        combi = np.unique(metadata['sweepID'])
+        samplingrate = metadata['Samplingrate'][0]
+        sweeplength = metadata['Sweeplength'][0]
+        pre = metadata['Pre Stimulus Time'][0]
+        post = sweeplength - pre
+        rep = metadata['Repititions'][0]
+        exp_ID = metadata['ID'][0]
+        pupil_freq = metadata['PupilFreq'][0]
+        active_zones = metadata['active_zones'][0]
+    except:
+        combi = np.unique(metadata['sweepID'])
+        samplingrate = metadata['Samplingrate'][0]
+        sweeplength = metadata['Sweeplength'][0]
+        pre = metadata['Pre Stimulus Time'][0]
+        post = sweeplength - pre
+        rep = metadata['Repititions'][0]
+        exp_ID = metadata['ID'][0]
+        pupil_freq = 'no pupil tracking'
+        active_zones = 'old stimulator'
+
+    stim_infos = []
+    for i in range(len(combi)):
+        selection = metadata[metadata['sweepID'] == combi[i]]
+        if "Modalities" in selection.columns:
+            stim_infos.append(
+            {'sweepID': selection['sweepID'].iloc[0], 'modality': selection['Modalities'].iloc[0],
+             'duration': selection['Stimulus Duration'].iloc[0]})
+
+        else:
+            try:
+                stim_infos.append(
+                {'sweepID': selection['sweepID'].iloc[0], 'stimtemp': selection['Stimulus Temp'].iloc[0],
+                 'basetemp': selection['Baseline Temp'].iloc[0], 'duration': selection['Stimulus Duration'].iloc[0],
+                'onramp': selection['OnRamp'].iloc[0],'offramp': selection['OffRamp'].iloc[0]})
+            except:
+                stim_infos.append(
+                {'sweepID': selection['sweepID'].iloc[0],'stimamp': selection['Stimulus Temp'].iloc[0],
+                 'basetemp': selection['Baseline Temp'].iloc[0],'duration': selection['Stimulus Duration'].iloc[0]})
+
+
+    return samplingrate, sweeplength, pre, post, rep, exp_ID,pupil_freq,active_zones, stim_infos
+
+def generate_event_core(data_timestamps, title):
+    ttl = neo.Event(data_timestamps * pq.s, labels=[title] * data_timestamps.size)
+    ttl.name = title
+
+
+    return ttl
+
+def generate_spiketrain_core(spikes, start=None, end=None, quality='Good', cluster_id=None):
+
+    if start is not None and end is not None:
+
+        spikes_segment = spikes[quality][cluster_id]['Spike Times'][
+            ((spikes[quality][cluster_id]['Spike Times']) > start) & (
+                        (spikes[quality][cluster_id]['Spike Times']) < end)]
+        train = neo.SpikeTrain(spikes_segment, units='s', t_start=start, t_stop=end, name=cluster_id)
+        train.annotate(quality=quality)
+        return train
+
+    spikes_segment = spikes[quality][cluster_id]['Spike Times']
+    train = neo.SpikeTrain(spikes_segment, units='s', t_start=start, t_stop=end, name=cluster_id)
+    train.annotate(quality=quality)
+
+    return train
+
+def raster_build(spikes_tmp, trials, samplingrate=30000, sweeplength=None):
+    raster = np.zeros([len(trials), sweeplength * samplingrate])
+
+    for ii in range(len(trials)):
+        raster_ind = spikes_tmp[np.where(np.logical_and(spikes_tmp > trials[ii],
+                                                        spikes_tmp < (trials[ii] +
+                                                                      sweeplength)))] - trials[ii]
+
+        raster_ind = raster_ind * samplingrate
+        raster[ii, raster_ind.astype(int)] = 1
+
+    return raster
+
+def generate_alignedspikes_core(raster, name=None): #, sweeplength=None, pre=None, post=None,index=None):
+
+    spikes = neo.IrregularlySampledSignal(np.where(raster == 1)[1], np.where(raster == 1)[0],
+                                          units='s', time_units='s', name=name,
+                                          description='sweep aligned spike times // container_name.signal = sweep_id')
+
+    #spikes.annotate(sweeplength=sweeplength, pre=pre, post=post, index=index)
+
+    return spikes
 
 def generate_DF(blk2):
     df = pd.DataFrame([])
@@ -218,8 +235,7 @@ def generate_DF(blk2):
             df_tmp.at[str(r), 'raster_loc'] = str(seg) + '_' + str(r)
 
             for e in range(nr_events):
-                if (test.annotations == blk2.segments[seg].events[e].annotations) & (
-                        'sweepstart' in blk2.segments[seg].events[e].name):
+                if (test.annotations == blk2.segments[seg].events[e].annotations):
                     df_tmp.at[str(r), 'event_loc'] = str(seg) + '_' + str(e)
 
             for ai in range(nr_aisignals):
@@ -238,3 +254,42 @@ def generate_DF(blk2):
         df = df.append(df_tmp)
 
     return df
+
+def generate_analogsignal_core(data_tmp, units='C', samplingRate=1000, inx=None):
+
+    ai_signal = neo.AnalogSignal(data_tmp, units=units, sampling_rate=samplingRate*pq.Hz,
+                                 name=inx+1)
+
+    return ai_signal
+
+def add_metaData(ai_signal,samplingrate, sweeplength, pre, post, rep, exp_ID,pupil_freq,active_zones, stim_infos, mod = None):
+
+    if mod == 'temp':
+        try:
+            sweep_id = list(stim_infos.values())[0]
+            stimtemp = list(stim_infos.values())[1]
+            basetemp = list(stim_infos.values())[2] 
+            duration = list(stim_infos.values())[3]
+            onramp = list(stim_infos.values())[4]
+            offramp = list(stim_infos.values())[5]
+            modality = mod
+             
+        except:
+            sweep_id = list(stim_infos.values())[0]
+            stimtemp = list(stim_infos.values())[1]
+            basetemp = list(stim_infos.values())[2] 
+            duration = list(stim_infos.values())[3]
+            onramp = 'old stim'
+            offramp = 'old stim'
+            modality =mod
+    else:
+        sweep_id = list(stim_infos.values())[0]
+        modality = list(stim_infos.values())[1]
+        duration = list(stim_infos.values())[2]
+        basetemp = 'no temp'
+        stimtemp = 'no temp'
+        onramp = 'old stim'
+        offramp = 'old stim'
+    ai_signal.annotate(sweeplength=sweeplength, samplinrate=samplingrate, basetemp=basetemp, sweep_Id=sweep_id,
+                       stimtemp=stimtemp, duration=duration,onramp = onramp, offramp = offramp,
+                       pre=pre, post=post, pupil_freq=pupil_freq,active_zones = active_zones,trials=rep,mod = mod)

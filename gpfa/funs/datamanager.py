@@ -4,6 +4,23 @@ import matplotlib.pyplot as plt
 import funs.util as util
 import funs.engine as engine
 import pdb
+import funs.learning as learning
+import funs.inference as inference
+import funs.engine as engine
+import numpy as np
+import scipy as sp
+import scipy.io as sio
+import scipy.optimize as op
+from scipy.optimize import approx_fprime
+import statsmodels.tools.numdiff as nd
+import matplotlib.pylab as plt
+import matplotlib.gridspec as gridspec
+from mpl_toolkits.mplot3d import Axes3D
+import pdb
+import copy
+import pickle
+import sys
+import pandas
 
 class StevensonDataset():
     def __init__(
@@ -17,7 +34,7 @@ class StevensonDataset():
         numTrData = True):
 
         T = int(trialDur/binSize)
-        matdat = sio.loadmat('data/Stevenson_2011_e1.mat')
+        matdat = sio.loadmat("C:/Users/tobiasleva/Work/poisson-gpfa-master/data/Stevenson_2011_e1.mat")
         self.matdat = matdat
         if numTrData: numTrials = len(matdat['Subject'][subject_id]['Trial'][0])
         if ydimData: ydim = len(matdat['Subject'][subject_id]['Trial'][0][0]['Neuron'][0])
@@ -318,6 +335,144 @@ class dataset:
         ax_K.set_title('$K_{tau_{true}}$')
         plt.tight_layout()
 
+class readNumpy():
+    def __init__(self,input_data,start,end, paramfilename = None):
+        
+        #input_data shape needs to be (#neurons,#trials,#bins)
+
+        data = []
+        ydim, T = input_data[:,0,:].shape
+        # xdim, trash = np.shape(dataPPGPFA['dataPPGPFA'][0,0]['x'])
+        window = end - start
+        trialDur = int(window*1000)
+        binSize = int(trialDur/T)
+
+        numTrials = input_data.shape[1]
+
+        for i in range(numTrials):
+            data.append({
+                'Y':input_data[:,i,:]})
+                # 'X':dataPPGPFA['dataPPGPFA'][0,i]['x']})
+
+        self.data = data
+        self.ydim = ydim
+        # self.xdim = xdim
+        self.T = T
+        self.trialDur = trialDur
+        self.binSize = binSize
+        self.numTrials = numTrials
+
+        if paramfilename != None:
+            importedParams = sio.loadmat(paramfilename)
+            initParams =  importedParams['initParams']
+            tau = np.ndarray.flatten(initParams['tau'][0][0])
+            C = initParams['C'][0][0]
+            d = np.ndarray.flatten(initParams['d'][0][0])
+            self.initParams = {'tau': tau, 'C':C, 'd':d}
+        
+        self.getAvgFiringRate()
+        message = '\nAverage firing rate per neuron in this dataset: %.3f Hz.' %np.mean(self.avgFR)
+        print(message)
+
+        self.getAllRaster()
+        self.getMeanAndVariance()
+        self.fitPolynomialToMeanVar()
+
+    def getAllRaster(self):
+        all_raster = np.zeros([self.ydim, len(self.data)*self.T])
+        for tr in range(len(self.data)):
+            all_raster[:,tr*self.T:(tr+1)*self.T] = self.data[tr]['Y']
+        self.all_raster = all_raster
+
+    def getMeanAndVariance(self):
+        means = np.zeros([self.ydim, self.T*len(self.data)])
+        variances = np.zeros([self.ydim, self.T*len(self.data)])
+        for tr in range(len(self.data)):
+            for yd in range(self.ydim):
+                means[yd,tr] = np.mean(self.data[tr]['Y'][yd,:])
+                variances[yd,tr] = np.var(self.data[tr]['Y'][yd,:])
+        self.means = means
+        self.variances = variances
+
+    def fitPolynomialToMeanVar(self):
+        means = self.means.flatten()
+        variances = self.variances.flatten()
+        def func(x,a,b): return a*x**b
+        p, cov = op.curve_fit(func, means, variances, maxfev = 100000)
+        self.curve_p = p
+        self.curve_p_cov = cov
+
+    def plotMeanVsVariance(self):
+        fig, ax = plt.subplots(ncols = 1, figsize = (4,4))
+        ax.plot(self.means.flatten(), self.variances.flatten(),'.')
+        ax.plot(
+            np.linspace(1e-2,max(np.max(self.means),np.max(self.variances)),20),
+            np.linspace(1e-2,max(np.max(self.means),np.max(self.variances)),20),
+            'g',linewidth=1)
+        ax.set_xlim([1e-2,max(np.max(self.means),np.max(self.variances))])
+        ax.set_ylim([1e-2,max(np.max(self.means),np.max(self.variances))])
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_xlabel('Mean Spike Count')
+        ax.set_ylabel('Variance of Spike Count')
+        if hasattr(self,'curve_p'):
+            x = np.linspace(1e-2,max(np.max(self.means),np.max(self.variances)),20)
+            y = self.curve_p[0]*x**self.curve_p[1]
+            ax.plot(x,y,'r',linewidth=1)
+            plt.legend(['Neuron/Trial','x=y','$f(x) = ax^b$\na=%.2f,b=%.2f'%(self.curve_p[0],self.curve_p[1])],
+                frameon = False, framealpha = 0, fontsize = 10,loc = 'best')
+        plt.tight_layout()
+        ax.grid(which='major')
+        simpleaxis(ax)
+
+
+    def getAvgFiringRate(self):
+        avgFR = np.zeros(self.ydim)
+        totalSpkCt = 0
+        for i in range(self.numTrials):
+            avgFR = avgFR + np.sum(self.data[i]['Y'],1)
+            totalSpkCt += np.sum(self.data[i]['Y'])
+        avgFR = avgFR/self.numTrials/(self.trialDur/1000)
+        self.avgFR = avgFR
+        self.totalSpkCt = totalSpkCt
+
+    
+
+    def plotTrajectory(self, trialToShow = 0):
+        '''
+        Plots ground truth latent trajectory, spike counts, parameters
+        '''
+        fig1, (ax0,ax1) = plt.subplots(nrows = 2, sharex = True, figsize = (5,4))
+        raster = ax0.imshow(self.data[trialToShow]['Y'], 
+            interpolation = "nearest", aspect = 'auto', cmap = 'gray_r')
+        # raster.set_cmap('spectral')
+        ax0.set_ylabel('Neuron Index')
+        ax0.set_title('Binned Spike Counts')
+        ax1.plot(range(self.T),self.data[trialToShow]['X'].T,linewidth=2)
+        ax1.set_xlabel('Time ('+str(self.T)+' ms bins)')
+        ax1.set_title('Ground Truth Latent Trajectory')
+        ax1.set_xlim([0,self.T])
+        ax1.grid(which='both')
+        plt.tight_layout()
+
+    def plotParams(self): 
+        gs = gridspec.GridSpec(2,2)
+
+        ax_C = plt.subplot(gs[0,0])
+        ax_d = plt.subplot(gs[1,0])
+        ax_K = plt.subplot(gs[:,1])
+
+        ax_C.imshow(self.datasetDetails['params']['C'].T, interpolation = "nearest")
+        ax_C.set_title('$C_{true}$')
+        ax_C.set_ylabel('Latent Dimension Index')
+        ax_C.set_xlabel('Neuron Index')
+        ax_C.set_yticks(range(self.xdim))
+        ax_d.plot(self.datasetDetails['params']['d'].T)
+        ax_d.set_title('$d_{true}$')
+        ax_d.set_xlabel('Neuron Index')
+        ax_K.imshow(self.K_big, interpolation = "nearest")
+        ax_K.set_title('$K_{tau_{true}}$')
+        plt.tight_layout()
 class MATLABdataset():
     def __init__(self,datfilename, paramfilename = None):
         dataPPGPFA = sio.loadmat(datfilename)

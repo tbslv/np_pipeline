@@ -38,6 +38,8 @@ def get_all_data(blk2,selection,raster=None,timestamps=None,spikes = None, aisig
     for it in range(iterations):   
         strings = list(selection[['raster_loc','event_loc','spiketrain_loc','ai_loc']].iloc[it,:].values)
         
+        print(strings)
+
         if raster:
             raster_tmp = access_raster_core(blk2,strings[0])
             raster_list.append(raster_tmp)
